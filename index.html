@@ -1,0 +1,586 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Double Pendulum — Chaos Bench</title>
+<style>
+  :root {
+    --bg: #06080d;
+    --panel: #0c111b;
+    --panel-edge: #1a2331;
+    --grid: #121a26;
+    --ink: #e8eef7;
+    --ink-dim: #8695a8;
+    --ink-faint: #5b6a7e;
+    --arm1: #f4b350;
+    --arm2: #3fd6c6;
+    --trail: #3fd6c6;
+    --accent: #f4b350;
+    --danger: #ff5d6c;
+    --mono: ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", Menlo, Consolas, monospace;
+    --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+
+  * { box-sizing: border-box; }
+
+  .wrap {
+    min-height: 100vh;
+    background:
+      radial-gradient(1200px 600px at 30% -10%, #0d1524 0%, transparent 60%),
+      var(--bg);
+    color: var(--ink);
+    font-family: var(--sans);
+    padding: clamp(14px, 3vw, 32px);
+    display: flex;
+    justify-content: center;
+  }
+
+  .frame {
+    width: 100%;
+    max-width: 1080px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 300px;
+    gap: 20px;
+  }
+
+  @media (max-width: 780px) {
+    .frame { grid-template-columns: minmax(0, 1fr); }
+  }
+
+  header.title {
+    grid-column: 1 / -1;
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+    border-bottom: 1px solid var(--panel-edge);
+    padding-bottom: 14px;
+  }
+  header.title h1 {
+    margin: 0;
+    font-family: var(--mono);
+    font-size: clamp(15px, 2.4vw, 20px);
+    font-weight: 600;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--ink);
+  }
+  header.title h1 span { color: var(--accent); }
+  header.title .sub {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+  }
+
+  .stage {
+    position: relative;
+    background:
+      linear-gradient(180deg, #0a0f18, #070a11);
+    border: 1px solid var(--panel-edge);
+    border-radius: 12px;
+    overflow: hidden;
+    aspect-ratio: 1 / 1;
+    min-height: 0;
+  }
+  canvas { display: block; width: 100%; height: 100%; touch-action: none; cursor: grab; }
+  canvas.grabbing { cursor: grabbing; }
+
+  .hint {
+    position: absolute;
+    left: 12px; bottom: 10px;
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: 0.06em;
+    color: var(--ink-faint);
+    pointer-events: none;
+    text-transform: uppercase;
+  }
+
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--panel-edge);
+    border-radius: 12px;
+    padding: 18px 18px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    align-self: start;
+  }
+
+  .group h2 {
+    margin: 0 0 12px;
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--ink-dim);
+  }
+
+  .control { margin-bottom: 15px; }
+  .control:last-child { margin-bottom: 0; }
+  .control .row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 7px;
+  }
+  .control label {
+    font-size: 13px;
+    color: var(--ink);
+  }
+  .control .val {
+    font-family: var(--mono);
+    font-size: 12.5px;
+    color: var(--accent);
+    font-variant-numeric: tabular-nums;
+  }
+  .control.warn .val { color: var(--danger); }
+
+  input[type=range] {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: 4px;
+    border-radius: 4px;
+    background: #1e2a3a;
+    outline: none;
+  }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 16px; height: 16px;
+    border-radius: 50%;
+    background: var(--accent);
+    border: 2px solid #0c111b;
+    box-shadow: 0 0 0 1px var(--accent);
+    cursor: pointer;
+  }
+  input[type=range]::-moz-range-thumb {
+    width: 16px; height: 16px;
+    border-radius: 50%;
+    background: var(--accent);
+    border: 2px solid #0c111b;
+    box-shadow: 0 0 0 1px var(--accent);
+    cursor: pointer;
+  }
+  .arm1-dot, .arm2-dot { display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:6px; vertical-align: middle; }
+  .arm1-dot { background: var(--arm1); }
+  .arm2-dot { background: var(--arm2); }
+
+  .buttons { display: flex; gap: 10px; }
+  button {
+    flex: 1;
+    font-family: var(--sans);
+    font-size: 13px;
+    font-weight: 600;
+    padding: 10px 12px;
+    border-radius: 8px;
+    border: 1px solid var(--panel-edge);
+    background: #141c29;
+    color: var(--ink);
+    cursor: pointer;
+    transition: background .15s, border-color .15s;
+  }
+  button:hover { background: #1b2534; border-color: #2b3a4f; }
+  button.primary { background: var(--accent); color: #1a1204; border-color: var(--accent); }
+  button.primary:hover { background: #ffc266; }
+  button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .readout {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px 14px;
+    font-family: var(--mono);
+    font-size: 12px;
+  }
+  .readout .k { color: var(--ink-faint); text-transform: uppercase; letter-spacing: 0.08em; font-size: 10px; }
+  .readout .v { color: var(--ink); font-variant-numeric: tabular-nums; }
+  .readout .cell { display: flex; flex-direction: column; gap: 2px; }
+  .energy-note { font-family: var(--mono); font-size: 10.5px; color: var(--ink-faint); line-height: 1.5; margin-top: 4px; }
+</style>
+
+<div class="wrap">
+  <div class="frame">
+    <header class="title">
+      <h1>Double Pendulum · <span>Chaos Bench</span></h1>
+      <div class="sub" id="statusLabel">running</div>
+    </header>
+
+    <div class="stage">
+      <canvas id="c"></canvas>
+      <div class="hint">drag either bob to reposition · release to swing</div>
+    </div>
+
+    <div class="panel">
+      <div class="group">
+        <h2>Geometry</h2>
+        <div class="control">
+          <div class="row">
+            <label for="l1"><span class="arm1-dot"></span>Upper arm L₁</label>
+            <span class="val" id="l1v">160</span>
+          </div>
+          <input type="range" id="l1" min="40" max="240" step="1" value="160">
+        </div>
+        <div class="control">
+          <div class="row">
+            <label for="l2"><span class="arm2-dot"></span>Lower arm L₂</label>
+            <span class="val" id="l2v">160</span>
+          </div>
+          <input type="range" id="l2" min="40" max="240" step="1" value="160">
+        </div>
+      </div>
+
+      <div class="group">
+        <h2>Integration</h2>
+        <div class="control" id="dtControl">
+          <div class="row">
+            <label for="dt">Time step Δt</label>
+            <span class="val" id="dtv">0.0100 s</span>
+          </div>
+          <input type="range" id="dt" min="1" max="120" step="1" value="10">
+        </div>
+        <div class="energy-note" id="dtNote">RK4 integrator · 1 step per frame</div>
+      </div>
+
+      <div class="group">
+        <h2>Live state</h2>
+        <div class="readout">
+          <div class="cell"><span class="k">θ₁</span><span class="v" id="rt1">0°</span></div>
+          <div class="cell"><span class="k">θ₂</span><span class="v" id="rt2">0°</span></div>
+          <div class="cell"><span class="k">energy</span><span class="v" id="rE">0</span></div>
+          <div class="cell"><span class="k">drift</span><span class="v" id="rD">0%</span></div>
+        </div>
+      </div>
+
+      <div class="buttons">
+        <button id="playBtn" class="primary">Pause</button>
+        <button id="resetBtn">Reset</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  const canvas = document.getElementById('c');
+  const ctx = canvas.getContext('2d');
+
+  // --- physics constants ---
+  const g = 9.81;
+  const m1 = 1, m2 = 1;      // masses (fixed)
+  const PX_PER_M = 0.01;     // pixels -> metres, for energy scale only
+
+  // --- state ---
+  let L1 = 160, L2 = 160;    // pixel lengths
+  let dt = 0.01;             // seconds per step
+  let state = { th1: Math.PI * 0.85, th2: Math.PI * 0.85, w1: 0, w2: 0 };
+  let running = true;
+  let E0 = null;             // reference energy
+  let trail = [];
+  const TRAIL_MAX = 340;
+
+  // pivot in canvas coords (css pixels)
+  let pivot = { x: 0, y: 0 };
+  let dpr = 1, cssW = 0, cssH = 0;
+
+  function resize() {
+    const rect = canvas.getBoundingClientRect();
+    dpr = Math.min(window.devicePixelRatio || 1, 2);
+    cssW = rect.width; cssH = rect.height;
+    canvas.width = Math.round(cssW * dpr);
+    canvas.height = Math.round(cssH * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    pivot.x = cssW / 2;
+    pivot.y = cssH * 0.40;
+  }
+
+  // --- equations of motion: returns angular accelerations ---
+  function accel(s) {
+    const { th1, th2, w1, w2 } = s;
+    // work in metres so g is consistent
+    const l1 = L1 * PX_PER_M, l2 = L2 * PX_PER_M;
+    const d = th1 - th2;
+    const cs = Math.cos(d), sn = Math.sin(d);
+    const denom = 2 * m1 + m2 - m2 * Math.cos(2 * d);
+
+    const a1 = (
+      -g * (2 * m1 + m2) * Math.sin(th1)
+      - m2 * g * Math.sin(th1 - 2 * th2)
+      - 2 * sn * m2 * (w2 * w2 * l2 + w1 * w1 * l1 * cs)
+    ) / (l1 * denom);
+
+    const a2 = (
+      2 * sn * (
+        w1 * w1 * l1 * (m1 + m2)
+        + g * (m1 + m2) * Math.cos(th1)
+        + w2 * w2 * l2 * m2 * cs
+      )
+    ) / (l2 * denom);
+
+    return { a1, a2 };
+  }
+
+  function deriv(s) {
+    const a = accel(s);
+    return { th1: s.w1, th2: s.w2, w1: a.a1, w2: a.a2 };
+  }
+
+  function add(s, ds, h) {
+    return {
+      th1: s.th1 + ds.th1 * h,
+      th2: s.th2 + ds.th2 * h,
+      w1: s.w1 + ds.w1 * h,
+      w2: s.w2 + ds.w2 * h,
+    };
+  }
+
+  function rk4(s, h) {
+    const k1 = deriv(s);
+    const k2 = deriv(add(s, k1, h / 2));
+    const k3 = deriv(add(s, k2, h / 2));
+    const k4 = deriv(add(s, k3, h));
+    return {
+      th1: s.th1 + (h / 6) * (k1.th1 + 2 * k2.th1 + 2 * k3.th1 + k4.th1),
+      th2: s.th2 + (h / 6) * (k1.th2 + 2 * k2.th2 + 2 * k3.th2 + k4.th2),
+      w1: s.w1 + (h / 6) * (k1.w1 + 2 * k2.w1 + 2 * k3.w1 + k4.w1),
+      w2: s.w2 + (h / 6) * (k1.w2 + 2 * k2.w2 + 2 * k3.w2 + k4.w2),
+    };
+  }
+
+  function energy(s) {
+    const l1 = L1 * PX_PER_M, l2 = L2 * PX_PER_M;
+    const { th1, th2, w1, w2 } = s;
+    // positions (y up = -cos)
+    const y1 = -l1 * Math.cos(th1);
+    const y2 = y1 - l2 * Math.cos(th2);
+    const v1sq = l1 * l1 * w1 * w1;
+    const v2sq = l1 * l1 * w1 * w1 + l2 * l2 * w2 * w2
+      + 2 * l1 * l2 * w1 * w2 * Math.cos(th1 - th2);
+    const KE = 0.5 * m1 * v1sq + 0.5 * m2 * v2sq;
+    const PE = m1 * g * y1 + m2 * g * y2;
+    return KE + PE;
+  }
+
+  function positions(s) {
+    const x1 = pivot.x + L1 * Math.sin(s.th1);
+    const y1 = pivot.y + L1 * Math.cos(s.th1);
+    const x2 = x1 + L2 * Math.sin(s.th2);
+    const y2 = y1 + L2 * Math.cos(s.th2);
+    return { x1, y1, x2, y2 };
+  }
+
+  // --- rendering ---
+  function drawGrid() {
+    ctx.clearRect(0, 0, cssW, cssH);
+    ctx.save();
+    ctx.strokeStyle = 'rgba(80,120,170,0.06)';
+    ctx.lineWidth = 1;
+    const step = 40;
+    for (let x = (pivot.x % step); x < cssW; x += step) {
+      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, cssH); ctx.stroke();
+    }
+    for (let y = (pivot.y % step); y < cssH; y += step) {
+      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(cssW, y); ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  function drawTrail() {
+    if (trail.length < 2) return;
+    ctx.save();
+    ctx.lineCap = 'round';
+    for (let i = 1; i < trail.length; i++) {
+      const a = i / trail.length;
+      ctx.strokeStyle = `rgba(63,214,198,${a * 0.5})`;
+      ctx.lineWidth = a * 2.2;
+      ctx.beginPath();
+      ctx.moveTo(trail[i - 1].x, trail[i - 1].y);
+      ctx.lineTo(trail[i].x, trail[i].y);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  function bob(x, y, r, color) {
+    ctx.save();
+    ctx.shadowColor = color;
+    ctx.shadowBlur = 14;
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  function render() {
+    const p = positions(state);
+    drawGrid();
+    drawTrail();
+
+    // arms
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = '#f4b350';
+    ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.moveTo(pivot.x, pivot.y); ctx.lineTo(p.x1, p.y1); ctx.stroke();
+
+    ctx.strokeStyle = '#3fd6c6';
+    ctx.beginPath(); ctx.moveTo(p.x1, p.y1); ctx.lineTo(p.x2, p.y2); ctx.stroke();
+
+    // pivot
+    ctx.fillStyle = '#7d8ea3';
+    ctx.beginPath(); ctx.arc(pivot.x, pivot.y, 4, 0, Math.PI * 2); ctx.fill();
+
+    // bobs
+    bob(p.x1, p.y1, 9, '#f4b350');
+    bob(p.x2, p.y2, 9, '#3fd6c6');
+  }
+
+  // --- readouts ---
+  const rt1 = document.getElementById('rt1');
+  const rt2 = document.getElementById('rt2');
+  const rE = document.getElementById('rE');
+  const rD = document.getElementById('rD');
+
+  function deg(rad) {
+    let d = (rad * 180 / Math.PI) % 360;
+    if (d > 180) d -= 360;
+    if (d < -180) d += 360;
+    return d;
+  }
+
+  function updateReadout() {
+    rt1.textContent = deg(state.th1).toFixed(1) + '°';
+    rt2.textContent = deg(state.th2).toFixed(1) + '°';
+    const E = energy(state);
+    rE.textContent = E.toFixed(4);
+    if (E0 !== null && Math.abs(E0) > 1e-9) {
+      const drift = ((E - E0) / Math.abs(E0)) * 100;
+      rD.textContent = (drift >= 0 ? '+' : '') + drift.toFixed(2) + '%';
+      rD.style.color = Math.abs(drift) > 5 ? 'var(--danger)' : 'var(--ink)';
+    }
+  }
+
+  // --- main loop ---
+  let lastReadout = 0;
+  function frame(t) {
+    if (running && !dragging) {
+      state = rk4(state, dt);
+      const p = positions(state);
+      trail.push({ x: p.x2, y: p.y2 });
+      if (trail.length > TRAIL_MAX) trail.shift();
+    }
+    render();
+    if (t - lastReadout > 80) { updateReadout(); lastReadout = t; }
+    requestAnimationFrame(frame);
+  }
+
+  // --- controls ---
+  const l1s = document.getElementById('l1');
+  const l2s = document.getElementById('l2');
+  const dts = document.getElementById('dt');
+  const l1v = document.getElementById('l1v');
+  const l2v = document.getElementById('l2v');
+  const dtv = document.getElementById('dtv');
+  const dtControl = document.getElementById('dtControl');
+  const dtNote = document.getElementById('dtNote');
+  const playBtn = document.getElementById('playBtn');
+  const resetBtn = document.getElementById('resetBtn');
+  const statusLabel = document.getElementById('statusLabel');
+
+  function setDt(sliderVal) {
+    dt = sliderVal / 1000; // ms -> s, range 0.001..0.120
+    dtv.textContent = dt.toFixed(4) + ' s';
+    const risky = dt > 0.045;
+    dtControl.classList.toggle('warn', risky);
+    dtNote.textContent = risky
+      ? 'large step — energy drift & blow-up likely'
+      : 'RK4 integrator · 1 step per frame';
+  }
+
+  l1s.addEventListener('input', () => { L1 = +l1s.value; l1v.textContent = l1s.value; E0 = null; trail.length = 0; });
+  l2s.addEventListener('input', () => { L2 = +l2s.value; l2v.textContent = l2s.value; E0 = null; trail.length = 0; });
+  dts.addEventListener('input', () => { setDt(+dts.value); });
+
+  function setRunning(r) {
+    running = r;
+    playBtn.textContent = r ? 'Pause' : 'Play';
+    statusLabel.textContent = r ? 'running' : 'paused';
+  }
+  playBtn.addEventListener('click', () => setRunning(!running));
+
+  function reset() {
+    state = { th1: Math.PI * 0.85, th2: Math.PI * 0.85, w1: 0, w2: 0 };
+    trail.length = 0;
+    E0 = energy(state);
+    setRunning(true);
+    updateReadout();
+  }
+  resetBtn.addEventListener('click', reset);
+
+  // --- drag interaction ---
+  let dragging = null; // 'b1' | 'b2' | null
+
+  function pointerPos(e) {
+    const rect = canvas.getBoundingClientRect();
+    return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+  }
+
+  function onDown(e) {
+    const m = pointerPos(e);
+    const p = positions(state);
+    const d1 = Math.hypot(m.x - p.x1, m.y - p.y1);
+    const d2 = Math.hypot(m.x - p.x2, m.y - p.y2);
+    if (d2 < 22 && d2 <= d1) dragging = 'b2';
+    else if (d1 < 22) dragging = 'b1';
+    if (dragging) {
+      canvas.classList.add('grabbing');
+      state.w1 = 0; state.w2 = 0;
+      trail.length = 0;
+      applyDrag(m);
+      e.preventDefault();
+    }
+  }
+
+  function applyDrag(m) {
+    if (dragging === 'b1') {
+      state.th1 = Math.atan2(m.x - pivot.x, m.y - pivot.y);
+    } else if (dragging === 'b2') {
+      const p = positions(state);
+      state.th2 = Math.atan2(m.x - p.x1, m.y - p.y1);
+    }
+  }
+
+  function onMove(e) {
+    if (!dragging) return;
+    applyDrag(pointerPos(e));
+    e.preventDefault();
+  }
+
+  function onUp() {
+    if (!dragging) return;
+    dragging = null;
+    canvas.classList.remove('grabbing');
+    state.w1 = 0; state.w2 = 0;
+    E0 = energy(state);
+  }
+
+  canvas.addEventListener('pointerdown', onDown);
+  window.addEventListener('pointermove', onMove);
+  window.addEventListener('pointerup', onUp);
+
+  window.addEventListener('resize', resize);
+
+  // init
+  resize();
+  setDt(+dts.value);
+  E0 = energy(state);
+  requestAnimationFrame(frame);
+})();
+</script>
+
+</body>
+</html>
